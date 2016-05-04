@@ -1,64 +1,97 @@
 let filters = require('./../assets/data/filters.json');
 
-import {bootstrap} from 'angular2/platform/browser';
-import {Input, Component, Directive, ChangeDetectorRef} from 'angular2/core';
+import { bootstrap } from 'angular2/platform/browser';
+import { ViewChild, Input, Component, ChangeDetectorRef, ElementRef } from 'angular2/core';
 import { CanvasService } from './canvasService';
+import { remote, ipcRenderer } from 'electron';
+import { writeFile } from 'fs';
 
-@Directive({
+let canvasBuffer = require('electron-canvas-to-buffer');
+let {dialog} = remote;
+
+@Component({
   selector: '[thumbnail]',
-  providers: [ CanvasService ]
+  template: `<canvas #childCanvas></canvas>`,
+  providers: [ CanvasService ],
+  styles: [`
+    img, canvas {
+      width: 150px;
+    }
+  `]
 })
 
 class Thumbnail {
-  currentFilter: string = '';
-
   @Input() filter: string = '';
   @Input() image: HTMLImageElement;
-  @Input() childCanvas: HTMLCanvasElement;
+  @ViewChild('childCanvas') childCanvas: ElementRef;
 
   constructor(private _cs: CanvasService) {};
 
-  ngOnChanges() {
-    if (this.image) {
-      this._cs.initCanvas(this.childCanvas, this.image);
-
-      let filterName = this.filter.toLowerCase();
-
-      if (this._cs[filterName])
-        this._cs[filterName]();
-      else
-        this._cs.resetCanvas();
+  ngAfterViewInit() {
+    if (this.image && this.childCanvas) {
+      this.initCanvas();
     }
+  }
+
+  ngOnChanges() {
+    if (this.image && this.childCanvas) {
+      this.initCanvas();
+    }
+  }
+
+  initCanvas() {
+    this._cs.initCanvas(this.childCanvas.nativeElement, this.image);
+
+    let filterName = this.filter.toLowerCase();
+
+    if (this._cs[filterName])
+      this._cs[filterName]();
+    else
+      this._cs.resetCanvas();
   }
 }
 
 @Component({
   selector: 'app',
   template: require('./app.html'),
-  styles: [require('./app.css')],
-  providers: [CanvasService],
-  directives: [Thumbnail]
+  styles: [ require('./app.css') ],
+  providers: [ CanvasService ],
+  directives: [ Thumbnail ]
 })
 
 export class App {
+  @ViewChild('canvas') canvas: ElementRef;
 
   imageElement: HTMLImageElement;
   filters: Array<Object> = filters;
+  dropzoneStylesVisible: boolean = true;
   currentFilter: string = '';
   showDropzone: boolean = true;
+  openDialogActive: boolean;
+  saveDialogActive: boolean;
 
   constructor(
     private _cd: ChangeDetectorRef,
     private _cs: CanvasService
   ) {}
 
-  handleDrop(e, canvas) {
+  showDropzoneStyles() {
+    this.dropzoneStylesVisible = true;
+    return false;
+  }
+
+  hideDropzoneStyles() {
+    this.dropzoneStylesVisible = false;
+    return false;
+  }
+
+  handleDrop(e) {
     e.preventDefault();
     var files: File = e.dataTransfer.files;
 
     Object.keys(files).forEach((key) => {
       if(files[key].type === 'image/png' || files[key].type === 'image/jpeg') {
-        this.loadImage(canvas, files[key].path);
+        this.loadImage(files[key].path);
       }
       else {
         alert('File must be a PNG or JPEG!');
@@ -69,12 +102,49 @@ export class App {
     return false;
   }
 
-  loadImage(canvas, fileName) {
+  loadImage(fileName) {
     let image: HTMLImageElement = new Image();
-    image.onload = this.imageLoaded.bind(this, canvas, image);
+    image.onload = this.imageLoaded.bind(this, this.canvas.nativeElement, image);
     image.src = fileName;
+  }
 
-    this.showDropzone = false;
+  open() {
+    if (!this.openDialogActive && !this.saveDialogActive) {
+      this.openDialogActive = true;
+      dialog.showOpenDialog( (fileNames) => {
+        this.openDialogActive = false;
+        if (fileNames === undefined) return;
+        let fileName = fileNames[0];
+        this.loadImage(fileName)
+      });
+    }
+  }
+
+  save() {
+    if (!this.saveDialogActive && !this.openDialogActive) {
+      this.saveDialogActive = true;
+      dialog.showSaveDialog({ filters: [
+        { name: 'png', extensions: ['png'] }
+      ]}, this.saveFile.bind(this));
+    }
+  }
+
+  saveFile(fileName) {
+    this.saveDialogActive = false;
+    if (fileName === undefined) return;
+
+    let buffer = canvasBuffer(this.canvas.nativeElement, 'image/png');
+
+    writeFile(fileName, buffer, this.saveFileCallback.bind(this, fileName));
+  }
+
+  saveFileCallback(fileName, err) {
+    if (err) {
+      console.log(err);
+      alert('There was an error; please try again');
+    } else {
+      alert(`Image saved to ${fileName}`);
+    }
   }
 
   setFilter(value) {
@@ -89,6 +159,10 @@ export class App {
   imageLoaded(canvas, image) {
     this.imageElement = image;
     this._cs.initCanvas(canvas, image);
+
+    this.showDropzone = false;
+    this.dropzoneStylesVisible = false;
+
     this._cd.detectChanges();
   }
 }
