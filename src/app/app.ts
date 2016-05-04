@@ -3,7 +3,7 @@ let filters = require('./../assets/data/filters.json');
 import { bootstrap } from 'angular2/platform/browser';
 import { ViewChild, Input, Component, ChangeDetectorRef, ElementRef } from 'angular2/core';
 import { CanvasService } from './canvasService';
-import { remote, ipcRenderer } from 'electron';
+import { remote } from 'electron';
 import { writeFile } from 'fs';
 
 let canvasBuffer = require('electron-canvas-to-buffer');
