@@ -74,11 +74,11 @@ let setMenu = () => {
 
   fileMenu.submenu
     .find(item => item.label === 'Open')
-    .click = () => mainWindow.webContents.send('open-file')
+  //   .click = () => SEND AN 'open-file' EVENT HERE
 
   fileMenu.submenu
     .find(item => item.label === 'Save As...')
-    .click = () => mainWindow.webContents.send('save-file')
+  //   .click = () => SEND A 'save-file' EVENT HERE
 
   menuTemplate
     .find(item => item.label === 'Window')
